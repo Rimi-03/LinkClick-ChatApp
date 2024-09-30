@@ -48,6 +48,8 @@ def connect():
 
     username_textbox.config(state=tk.DISABLED)
     username_button.config(state=tk.DISABLED)
+    reconnect_button.config(state=tk.NORMAL)
+    logout_button.config(state=tk.NORMAL)
 
 def reconnect():
     global client, is_connected
@@ -115,8 +117,9 @@ def logout():
             client.close()
             is_connected = False
             add_message("[Client] Disconnected from server.")
-            username_textbox.config(state=tk.NORMAL)
-            username_button.config(state=tk.NORMAL)
+            username_textbox.config(state=tk.DISABLED)
+            username_button.config(state=tk.DISABLED)
+            reconnect_button.config(state=tk.NORMAL)
         except:
             messagebox.showerror("Error", "Failed to disconnect properly.")
     else:
@@ -145,9 +148,11 @@ username_button.pack(side=tk.LEFT, padx=10)
 
 reconnect_button = tk.Button(top_frame, text="Reconnect", font=BUTTON_FONT, bg='#FF6347', fg=WHITE, command=reconnect)
 reconnect_button.pack(side=tk.LEFT, padx=5)
+reconnect_button.config(state=tk.DISABLED)
 
 logout_button = tk.Button(top_frame, text="Logout", font=BUTTON_FONT, bg='#FF6347', fg=WHITE, command=logout)
 logout_button.pack(side=tk.LEFT, padx=5)
+logout_button.config(state=tk.DISABLED)
 
 middle_frame = tk.Frame(root, bg=LIGHT_GREY, padx=10, pady=10)
 middle_frame.pack(fill="both", expand=True, padx=10, pady=10)
