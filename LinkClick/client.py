@@ -93,6 +93,15 @@ def listen_for_messages_from_server(client):
             add_message("[Server] Connection lost. Please restart the server and click 'Reconnect'.")
             is_connected = False
             break
+        except socket.error as e:
+            if e.errno == 10053:
+                add_message("[Error] Connection aborted by your host machine.")
+                is_connected = False
+                break
+            else:
+                messagebox.showerror("Error", f"Unexpected error occurred: {e}")
+                is_connected = False
+                break
         except Exception as e:
             messagebox.showerror("Error", f"Unexpected error occurred: {e}")
             is_connected = False
@@ -102,7 +111,7 @@ def logout():
     global is_connected
     if is_connected:
         try:
-            client.sendall("LOGOUT".encode())  # Notify the server of logout
+            client.sendall("LOGOUT".encode()) 
             client.close()
             is_connected = False
             add_message("[Client] Disconnected from server.")
@@ -114,7 +123,7 @@ def logout():
         messagebox.showinfo("Info", "You are not connected to the server.")
 
 root = tk.Tk()
-root.geometry("750x650")  # Final merged size
+root.geometry("750x650")
 root.title("LinkClick Chat Client")
 root.configure(bg=DARK_GREY)
 root.resizable(False, False)
@@ -128,7 +137,7 @@ header_label.pack()
 username_label = tk.Label(top_frame, text="Enter Username: ", font=FONT, bg=DARK_GREY, fg=SOFT_WHITE)
 username_label.pack(side=tk.LEFT, padx=(10, 0))
 
-username_textbox = tk.Entry(top_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=25)  # Final merged width
+username_textbox = tk.Entry(top_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=25)
 username_textbox.pack(side=tk.LEFT, padx=10)
 
 username_button = tk.Button(top_frame, text="Join", font=BUTTON_FONT, bg=OCEAN_BLUE, fg=WHITE, command=connect)
@@ -150,7 +159,7 @@ message_box.pack(fill="both", expand=True)
 bottom_frame = tk.Frame(root, bg=DARK_GREY, pady=10)
 bottom_frame.pack(fill="x", padx=10, pady=10)
 
-message_textbox = tk.Entry(bottom_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=55)  # Final merged width
+message_textbox = tk.Entry(bottom_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=55)
 message_textbox.pack(side=tk.LEFT, padx=10)
 
 message_button = tk.Button(bottom_frame, text="Send", font=BUTTON_FONT, bg=OCEAN_BLUE, fg=WHITE, command=send_message)
