@@ -1,4 +1,3 @@
-#Server.py
 import socket
 import threading
 import tkinter as tk
@@ -15,6 +14,9 @@ def listen_for_messages(client, username):
     while True:
         try:
             message = client.recv(2048).decode('utf-8')
+            if message == 'LOGOUT':  # Handle logout request
+                remove_client(client, username)
+                break
             if message != '':
                 final_msg = username + '~' + message
                 send_message_to_all(final_msg)
@@ -22,6 +24,16 @@ def listen_for_messages(client, username):
                 print(f"The message sent from client {username} is empty")
         except:
             break
+
+def remove_client(client, username):
+    global active_clients
+    for u, c in active_clients:
+        if c == client:
+            active_clients.remove((u, c))
+            break
+    client.close()
+    prompt_message = f"SERVER~{username} has left the chat."
+    send_message_to_all(prompt_message)
 
 def send_message_to_client(client, message):
     client.sendall(message.encode())
@@ -85,7 +97,6 @@ def stop_server():
     else:
         messagebox.showerror("Error", "Server is not running!")
 
-
 def accept_clients():
     global server
     while is_server_running:
@@ -109,7 +120,7 @@ root.resizable(False, False)
 message_box = tk.Text(root, height=15, state=tk.DISABLED)
 message_box.pack(pady=20)
 
-start_button = tk.Button(root, text="Start Server", font=("Helvetica", 15) ,bg='#464EB8', fg='white', command=start_server)
+start_button = tk.Button(root, text="Start Server", font=("Helvetica", 15), bg='#464EB8', fg='white', command=start_server)
 start_button.pack(pady=5)
 
 stop_button = tk.Button(root, text="Stop Server", font=("Helvetica", 15), bg='#464EB8', fg='white', command=stop_server)
