@@ -14,7 +14,7 @@ def listen_for_messages(client, username):
     while True:
         try:
             message = client.recv(2048).decode('utf-8')
-            if message == 'LOGOUT':  # Handle logout request
+            if message == 'LOGOUT':
                 remove_client(client, username)
                 break
             if message != '':
@@ -33,6 +33,7 @@ def remove_client(client, username):
             break
     client.close()
     prompt_message = f"SERVER~{username} has left the chat."
+    add_message(prompt_message)
     send_message_to_all(prompt_message)
 
 def send_message_to_client(client, message):
