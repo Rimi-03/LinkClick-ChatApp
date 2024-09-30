@@ -1,4 +1,3 @@
-#Server.py
 import socket
 import threading
 import tkinter as tk
@@ -25,7 +24,6 @@ def listen_for_messages(client, username):
                 print(f"The message sent from client {username} is empty")
         except:
             break
-
 
 def remove_client(client, username):
     global active_clients
@@ -99,7 +97,6 @@ def stop_server():
     else:
         messagebox.showerror("Error", "Server is not running!")
 
-
 def accept_clients():
     global server
     while is_server_running:
@@ -123,7 +120,7 @@ root.resizable(False, False)
 message_box = tk.Text(root, height=15, state=tk.DISABLED)
 message_box.pack(pady=20)
 
-start_button = tk.Button(root, text="Start Server", font=("Helvetica", 15) ,bg='#464EB8', fg='white', command=start_server)
+start_button = tk.Button(root, text="Start Server", font=("Helvetica", 15), bg='#464EB8', fg='white', command=start_server)
 start_button.pack(pady=5)
 
 stop_button = tk.Button(root, text="Stop Server", font=("Helvetica", 15), bg='#464EB8', fg='white', command=stop_server)

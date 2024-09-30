@@ -114,7 +114,7 @@ def logout():
         messagebox.showinfo("Info", "You are not connected to the server.")
 
 root = tk.Tk()
-root.geometry("750x650")
+root.geometry("750x650")  # Final merged size
 root.title("LinkClick Chat Client")
 root.configure(bg=DARK_GREY)
 root.resizable(False, False)
@@ -128,7 +128,7 @@ header_label.pack()
 username_label = tk.Label(top_frame, text="Enter Username: ", font=FONT, bg=DARK_GREY, fg=SOFT_WHITE)
 username_label.pack(side=tk.LEFT, padx=(10, 0))
 
-username_textbox = tk.Entry(top_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=25)
+username_textbox = tk.Entry(top_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=25)  # Final merged width
 username_textbox.pack(side=tk.LEFT, padx=10)
 
 username_button = tk.Button(top_frame, text="Join", font=BUTTON_FONT, bg=OCEAN_BLUE, fg=WHITE, command=connect)
@@ -150,7 +150,7 @@ message_box.pack(fill="both", expand=True)
 bottom_frame = tk.Frame(root, bg=DARK_GREY, pady=10)
 bottom_frame.pack(fill="x", padx=10, pady=10)
 
-message_textbox = tk.Entry(bottom_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=55)
+message_textbox = tk.Entry(bottom_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=55)  # Final merged width
 message_textbox.pack(side=tk.LEFT, padx=10)
 
 message_button = tk.Button(bottom_frame, text="Send", font=BUTTON_FONT, bg=OCEAN_BLUE, fg=WHITE, command=send_message)
