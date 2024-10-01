@@ -130,9 +130,10 @@ def add_message_to_chat_activity(message):
 def update_connected_clients():
     connected_clients_box.config(state=tk.NORMAL)
     connected_clients_box.delete(1.0, tk.END)
-    if active_clients:
-        for username, client in active_clients:
-            connected_clients_box.insert(tk.END, f"{username}, ")
+    clients_list = [username for username, client in active_clients]
+    if clients_list:
+        connected_clients_box.insert(tk.END, ", ".join(clients_list))
+        send_message_to_all(f"USERS~{', '.join(clients_list)}")  # Send the list of users to all clients
     else:
         connected_clients_box.insert(tk.END, "")
     connected_clients_box.see(tk.END)
@@ -153,7 +154,6 @@ chat_activity_label = tk.Label(root, text="Chat Activity:", font=("Helvetica", 1
 chat_activity_label.pack(pady=5)
 chat_activity_box = tk.Text(root, height=10, state=tk.DISABLED)
 chat_activity_box.pack(pady=10, padx=10)
-
 
 connected_clients_label = tk.Label(root, text="Connected Clients:", font=("Helvetica", 14))
 connected_clients_label.pack(pady=5)
