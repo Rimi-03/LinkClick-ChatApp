@@ -6,7 +6,7 @@ from tkinter import messagebox
 HOST = '127.0.0.1'
 PORT = 1234
 LISTENER_LIMIT = 5
-active_clients = []
+active_clients = {}
 server = None
 is_server_running = False
 
@@ -14,28 +14,48 @@ def listen_for_messages(client, username):
     while True:
         try:
             message = client.recv(2048).decode('utf-8')
+
             if message == 'LOGOUT':
                 remove_client(client, username)
                 break
-            if message != '':
+
+            elif message.startswith('PRIVATE~'):
+                recipient, private_message = message[8:].split('~', 1)
+                send_private_message(username, recipient, private_message)
+
+            elif message != '':
                 final_msg = f"{username}~{message}"
                 add_message_to_chat_activity(final_msg)
                 send_message_to_all(final_msg)
+
             else:
                 print(f"The message sent from client {username} is empty")
         except:
             break
 
+def notify_logout(username, recipient):
+    if recipient in active_clients:
+        logout_message = f"LOGOUT_PRIVATE~{username}"
+        send_message_to_client(active_clients[recipient], logout_message)  # Notify recipient only
+
 def remove_client(client, username):
     global active_clients
-    for u, c in active_clients:
-        if c == client:
-            active_clients.remove((u, c))
-            break
+    client_info = client.getpeername()
+
+    if username in active_clients:
+        # Notify private chat partners before removing the user
+        for user in active_clients.keys():
+            if user != username:
+                notify_logout(username, user)
+        
+        del active_clients[username]
     client.close()
+
+    server_log_message = f"Client {client_info[0]}:{client_info[1]} has disconnected."
+    add_message_to_server_log(server_log_message)
+
     prompt_message = f"Server~{username} has left the chat."
     add_message_to_chat_activity(prompt_message)
-    add_message_to_server_log(prompt_message)
     send_message_to_all(prompt_message)
     update_connected_clients()
 
@@ -43,23 +63,26 @@ def send_message_to_client(client, message):
     client.sendall(message.encode())
 
 def send_message_to_all(message):
-    for user in active_clients:
-        send_message_to_client(user[1], message)
+    for username, client in active_clients.items():
+        send_message_to_client(client, message)
+
+def send_private_message(sender, recipient, message):
+    if recipient in active_clients:
+        private_msg = f"[Private] {sender}~{message}"
+        send_message_to_client(active_clients[recipient], private_msg)
+        add_message_to_chat_activity(f"[Private] {sender} to {recipient}~{message}")
 
 def client_handler(client):
     while True:
         try:
-            username = client.recv(2048).decode('utf-8')
-            if username != '':
-                active_clients.append((username, client))
+            username = client.recv(2048).decode('utf-8').strip()
+            if username != '' and username not in active_clients:
+                active_clients[username] = client
                 prompt_message = f"Server~{username} added to the chat"
                 add_message_to_chat_activity(prompt_message)
-                add_message_to_server_log(prompt_message)
                 send_message_to_all(prompt_message)
                 update_connected_clients()
                 break
-            else:
-                print("Client username is empty")
         except:
             break
 
@@ -88,7 +111,7 @@ def stop_server():
     if is_server_running:
         is_server_running = False
 
-        for username, client in active_clients:
+        for username, client in active_clients.items():
             try:
                 client.close()
             except:
@@ -112,7 +135,8 @@ def accept_clients():
             client, address = server.accept()
             add_message_to_server_log(f"Client {address[0]}:{address[1]} connected.")
             threading.Thread(target=client_handler, args=(client,), daemon=True).start()
-        except:
+        except Exception as e:
+            print(f"Error accepting clients: {e}")
             break
 
 def add_message_to_server_log(message):
@@ -130,10 +154,10 @@ def add_message_to_chat_activity(message):
 def update_connected_clients():
     connected_clients_box.config(state=tk.NORMAL)
     connected_clients_box.delete(1.0, tk.END)
-    clients_list = [username for username, client in active_clients]
+    clients_list = list(active_clients.keys())
     if clients_list:
         connected_clients_box.insert(tk.END, ", ".join(clients_list))
-        send_message_to_all(f"USERS~{', '.join(clients_list)}")  # Send the list of users to all clients
+        send_message_to_all(f"USERS~{', '.join(clients_list)}")
     else:
         connected_clients_box.insert(tk.END, "")
     connected_clients_box.see(tk.END)
