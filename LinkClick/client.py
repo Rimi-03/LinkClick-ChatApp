@@ -22,6 +22,7 @@ is_connected = False
 
 # Dictionary to store private chat windows
 private_chat_windows = {}
+blocked_users = set()
 
 def add_message(message):
     message_box.config(state=tk.NORMAL)
@@ -110,22 +111,31 @@ def listen_for_messages_from_server(client):
     while is_connected:
         try:
             message = client.recv(2048).decode('utf-8')
+
             if message.startswith("USERS~"):
                 users = message.replace("USERS~", "").split(", ")
                 update_online_clients(users)
+
             elif message.startswith("OPEN_PRIVATE_CHAT~"):
                 recipient = message.split("~")[1]
                 open_private_chat(recipient)
+
             elif message.startswith("[Private]"):
                 handle_private_message(message)
+
             elif message.startswith("LOGOUT_PRIVATE~"):
                 recipient = message.split("~")[1]
                 if recipient in private_chat_windows:
                     private_chat_windows[recipient].add_private_message(f"[Server] {recipient} has logged out.")
+
+            elif "[Server]" in message and "has blocked you" in message:
+                handle_private_message(message)  # This will notify the user they have been blocked
+
             elif message != '':
                 username = message.split("~")[0]
                 content = message.split("~")[1]
                 add_message(f"[{username}] {content}")
+
         except ConnectionResetError:
             add_message("[Server] Connection lost. Click 'Reconnect' to connect to the server.")
             is_connected = False
@@ -143,6 +153,7 @@ def listen_for_messages_from_server(client):
             messagebox.showerror("Error", f"Unexpected error occurred: {e}")
             is_connected = False
             break
+
 
 class PrivateChatWindow:
     def __init__(self, recipient):
@@ -172,9 +183,18 @@ class PrivateChatWindow:
         self.send_button.pack(side=tk.RIGHT)
         self.message_textbox.bind('<Return>', lambda event: self.send_private_message())
         
+        self.block_button = tk.Button(self.bottom_frame, text="Block", font=BUTTON_FONT, bg=RED, fg=WHITE, command=self.block_user)
+        self.block_button.pack(side=tk.RIGHT, padx=10)
+
+        if self.recipient in blocked_users:
+            self.send_button.config(state=tk.DISABLED)
+
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def send_private_message(self):
+        if self.recipient in blocked_users:
+            return
+        
         message = self.message_textbox.get()
         if message != '':
             try:
@@ -193,6 +213,13 @@ class PrivateChatWindow:
         self.chat_box.config(state=tk.DISABLED)
         self.chat_box.see(tk.END)
 
+    def block_user(self):
+        """Add the recipient to the blocked users list."""
+        blocked_users.add(self.recipient)
+        self.add_private_message(f"[Server] You blocked {self.recipient}.")
+        self.block_button.config(state=tk.DISABLED)
+        #self.send_button.config(state=tk.DISABLED)
+
     def on_close(self):
         del private_chat_windows[self.recipient]  # Remove window from dictionary
         self.root.destroy()
@@ -207,6 +234,10 @@ def handle_private_message(message):
 
         sender = parts[0].replace("[Private] ", "")
         content = parts[1]
+
+        if sender in blocked_users:
+            add_message(f"[Server] Message from {sender} blocked.")
+            return
 
         # Check if a private chat window is already open with the sender
         if sender in private_chat_windows:
@@ -292,8 +323,7 @@ def on_window_close():
         except:
             messagebox.showerror("Error", "Failed to disconnect properly.")
     root.destroy()
-    
-    
+
 #GUI
 root = tk.Tk()
 root.geometry("1000x700")
