@@ -11,7 +11,6 @@ server = None
 is_server_running = False
 
 blocked_users = {}
-clients = {}
 
 def listen_for_messages(client, username):
     while True:
@@ -25,10 +24,6 @@ def listen_for_messages(client, username):
             elif message.startswith('PRIVATE~'):
                 recipient, private_message = message[8:].split('~', 1)
                 send_private_message(username, recipient, private_message)
-
-            elif message.startswith("BLOCK~"):
-                user_to_block = message.split("~")[1]
-                block_user(username, user_to_block)
 
             elif message != '':
                 final_msg = f"{username}~{message}"
@@ -83,8 +78,6 @@ def client_handler(client):
     while True:
         try:
             username = client.recv(2048).decode('utf-8').strip()
-            clients[client] = username
-            blocked_users[username] = set()
             if username != '' and username not in active_clients:
                 active_clients[username] = client
                 prompt_message = f"Server~{username} added to the chat"
@@ -171,56 +164,6 @@ def update_connected_clients():
         connected_clients_box.insert(tk.END, "")
     connected_clients_box.see(tk.END)
     connected_clients_box.config(state=tk.DISABLED)
-
-# Function to broadcast messages to all clients except the blocked ones
-def broadcast(message, sender_client):
-    sender_username = clients[sender_client]
-    for client, username in clients.items():
-        if sender_username in blocked_users.get(username, []):  # Skip blocked users
-            continue
-        try:
-            client.send(message.encode())
-        except Exception as e:
-            print(f"Error sending message to {username}: {e}")
-            remove_client(client)
-
-# Handle private message delivery, skipping blocked recipients
-def send_private_message(sender, recipient, message):
-    recipient_client = None
-    for client, username in clients.items():
-        if username == recipient:
-            recipient_client = client
-            break
-
-    if recipient_client:
-        if sender in blocked_users.get(recipient, []):
-            sender_client = next(client for client, uname in clients.items() if uname == sender)
-            sender_client.send(f"[Server] You have been blocked by {recipient}.".encode())
-            return  # Do not deliver message if the sender is blocked
-        try:
-            recipient_client.send(f"[Private] {sender}~{message}".encode())
-        except Exception as e:
-            print(f"Error sending private message to {recipient}: {e}")
-
-# Add a user to the block list and notify the blocked user
-def block_user(username, user_to_block):
-    if user_to_block in clients.values():  # Ensure the user exists
-        blocked_users[username].add(user_to_block)
-        print(f"{username} blocked {user_to_block}")
-
-        # Notify the blocker that the block was successful
-        blocker_socket = next(client for client, uname in clients.items() if uname == username)
-        blocker_socket.send(f"[Server] You have blocked {user_to_block}.".encode())
-
-        # Notify the blocked user that they have been blocked
-        blocked_user_socket = next(client for client, uname in clients.items() if uname == user_to_block)
-        blocked_user_socket.send(f"[Server] {username} has blocked you. SEND_DISABLED".encode())  # Notify the blocked user
-
-        blocker_socket.send("SEND_DISABLED".encode())  # Disable sender's send button
-        blocked_user_socket.send("SEND_DISABLED".encode())  # Disable blocked user's send button
-
-    else:
-        print(f"User {user_to_block} not found.")
 
 
 # GUI
