@@ -156,6 +156,14 @@ class PrivateChatWindow:
         self.root.configure(bg=DARK_GREY)
         self.root.resizable(False, False)
 
+        # Top frame for the "Back" button
+        self.top_frame = tk.Frame(self.root, bg=DARK_GREY)
+        self.top_frame.pack(fill="x", padx=5, pady=5)
+
+        # "Back" button to go back to the user selection (placed in the top left)
+        self.back_button = tk.Button(self.top_frame, text="<-", font=BUTTON_FONT, bg=DARK_GREY, fg=WHITE, command=self.go_back)
+        self.back_button.pack(side=tk.LEFT)
+
         # For displaying messages
         self.middle_frame = tk.Frame(self.root, bg=DARK_GREY)
         self.middle_frame.pack(fill="both", expand=True, padx=10, pady=(10, 0))
@@ -171,12 +179,12 @@ class PrivateChatWindow:
         self.message_textbox = tk.Entry(self.bottom_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY)
         self.message_textbox.pack(side=tk.LEFT, fill="x", expand=True, padx=(0, 10))
 
+        self.block_button = tk.Button(self.bottom_frame, text="Block", font=BUTTON_FONT, bg=RED, fg=WHITE, command=self.toggle_block_user)
+        self.block_button.pack(side=tk.RIGHT, padx=10)
+
         self.send_button = tk.Button(self.bottom_frame, text="Send", font=BUTTON_FONT, bg=OCEAN_BLUE, fg=WHITE, command=self.send_private_message)
         self.send_button.pack(side=tk.RIGHT)
         self.message_textbox.bind('<Return>', lambda event: self.send_private_message())
-        
-        self.block_button = tk.Button(self.bottom_frame, text="Block", font=BUTTON_FONT, bg=RED, fg=WHITE, command=self.toggle_block_user)
-        self.block_button.pack(side=tk.RIGHT, padx=10)
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
@@ -203,26 +211,18 @@ class PrivateChatWindow:
         self.chat_box.see(tk.END)
 
     def toggle_block_user(self):
-        """Toggle block/unblock the recipient."""
         if self.recipient in blocked_users:
-            # Unblock the user
             blocked_users.remove(self.recipient)
             self.add_private_message(f"[Server] You unblocked {self.recipient}.")
             self.block_button.config(text="Block", bg=RED)
         else:
-            # Block the user
             blocked_users.add(self.recipient)
             self.add_private_message(f"[Server] You blocked {self.recipient}.")
-            self.block_button.config(text="Unblock", bg="orange")  # Change the button text and color
+            self.block_button.config(text="Unblock", bg="orange") 
             self.send_block_message(self.recipient)
-    
-    def send_block_message(self, recipient):
-        """Send a block command to the server."""
-        try:
-            message = f"BLOCK~{recipient}"
-            client.sendall(message.encode())
-        except:
-            messagebox.showerror("Error", "Failed to send block command to the server.")
+    def go_back(self):
+        self.root.destroy()
+        open_private_chat()
 
     def on_close(self):
         del private_chat_windows[self.recipient]  # Remove window from dictionary
