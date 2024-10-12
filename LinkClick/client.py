@@ -1,8 +1,12 @@
 import socket
 import threading
 import tkinter as tk
-from tkinter import scrolledtext, messagebox, Listbox, Scrollbar
-from cryptography.fernet import Fernet
+from tkinter import scrolledtext, messagebox, Listbox, Scrollbar, filedialog, simpledialog
+import os
+import subprocess
+import platform
+
+
 
 HOST = '127.0.0.1'
 PORT = 1234
@@ -18,9 +22,6 @@ SMALL_FONT = ("Helvetica", 11)
 HEADER_FONT = ("Helvetica", 16, "bold")
 RED = "#FF0000"
 
-# Use the same key as the server
-key = b'heREfrR4QQh614C7kKXolHP4MIydOI7_7vT6SSEwHdA='  # Replace with the actual key
-cipher = Fernet(key)
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 is_connected = False
@@ -29,21 +30,70 @@ is_connected = False
 private_chat_windows = {}
 blocked_users = set()
 
-def encrypt_message(message):
-    """Encrypts a message using the symmetric key."""
-    try:
-        return cipher.encrypt(message.encode())
-    except Exception as e:
-        messagebox.showerror("Encryption Error", str(e))
-        return None
+available_files = []  # To store available files for download
 
-def decrypt_message(encrypted_message):
-    """Decrypts a message using the symmetric key."""
+def update_available_files(file_info):
+    """Update the list of available files for download."""
+    filename = file_info.split('~')[1]
+    available_files.append(filename)
+    add_message_to_chat_activity(f"[Server] New file available: {filename}")
+
+def show_available_files():
+    """Display available files in a dialog for the user to select from."""
+    if not available_files:
+        messagebox.showinfo("No Files", "No files available for download.")
+        return
+    
+    file_to_download = simpledialog.askstring("Download File", "Available files:\n" + "\n".join(available_files) + "\n\nEnter the filename to download:")
+    
+    # Check if file_to_download is not None and is in available_files
+    if file_to_download is not None and file_to_download in available_files:
+        request_file_download(file_to_download)
+    else:
+        # Show warning only if a filename was entered and not found
+        if file_to_download is not None:
+            messagebox.showwarning("Invalid Selection", "File not found or invalid filename.")
+
+def upload_file():
+    """Open a dialog to select a file and upload it to the server."""
+    filename = filedialog.askopenfilename()
+    if filename:
+        try:
+            client.sendall(f"UPLOAD~{os.path.basename(filename)}~{os.path.getsize(filename)}".encode())
+            with open(filename, 'rb') as f:
+                bytes_data = f.read(2048)
+                while bytes_data:
+                    client.sendall(bytes_data)
+                    bytes_data = f.read(2048)
+
+            # Notify successful upload and open the file
+            add_message_to_chat_activity(f"[Client] Uploaded {os.path.basename(filename)} successfully.")
+            open_file(filename)  # Open the file after successful upload
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to upload file: {e}")
+
+def open_file(filepath):
+    """Open the uploaded file using the default application."""
     try:
-        return cipher.decrypt(encrypted_message).decode()
+        if platform.system() == 'Windows':
+            os.startfile(filepath)  # Windows
+        elif platform.system() == 'Darwin':  # macOS
+            subprocess.run(['open', filepath])
+        else:  # Linux and other Unix-like systems
+            subprocess.run(['xdg-open', filepath])
     except Exception as e:
-        messagebox.showerror("Decryption Error", str(e))
-        return None
+        print(f"Failed to open file: {e}")
+
+def add_message_to_chat_activity(message):
+    # Call the existing add_message function to display the message
+    add_message(message)
+
+def request_file_download(filename):
+    client.sendall(f"DOWNLOAD~{filename}".encode())
+    
+# Example GUI button to request file download
+def on_download_button_click(filename):
+    request_file_download(filename)
 
 
 def add_message(message):
@@ -94,6 +144,8 @@ def connect():
     reconnect_button.config(state=tk.NORMAL)
     logout_button.config(state=tk.NORMAL)
     private_chat_button.config(state=tk.NORMAL)
+    upload_button.config(state=tk.NORMAL)
+    download_button.config(state=tk.NORMAL)
 
 
 def reconnect():
@@ -121,10 +173,8 @@ def send_message():
 
     if message != '':
         try:
-            encrypted_message = encrypt_message(message)
-            client.sendall(encrypted_message)
+            client.sendall(message.encode())
             message_textbox.delete(0, len(message))
-
         except:
             messagebox.showerror("Error", "Failed to send message due to server outage. Click 'Reconnect' or try again later.")
     else:
@@ -134,12 +184,12 @@ def listen_for_messages_from_server(client):
     global is_connected
     while is_connected:
         try:
-            encrypted_message = client.recv(2048)
-            message = decrypt_message(encrypted_message)
-
+            message = client.recv(2048).decode('utf-8')
             if message.startswith("USERS~"):
                 users = message.replace("USERS~", "").split(", ")
                 update_online_clients(users)
+            elif message.startswith('NEW_FILE~'):
+                update_available_files(message)
             elif message.startswith("OPEN_PRIVATE_CHAT~"):
                 recipient = message.split("~")[1]
                 open_private_chat(recipient)
@@ -221,9 +271,7 @@ class PrivateChatWindow:
         message = self.message_textbox.get()
         if message != '':
             try:
-                # Encrypt the private message before sending
-                encrypted_message = encrypt_message(message)
-                formatted_message = f"PRIVATE~{self.recipient}~{encrypted_message.decode()}"
+                formatted_message = f"PRIVATE~{self.recipient}~{message}"
                 client.sendall(formatted_message.encode())  # Send private message to server
                 self.add_private_message(f"[Me] {message}")  # Display in the chat window
                 self.message_textbox.delete(0, tk.END)
@@ -265,14 +313,11 @@ def handle_private_message(message):
             return
 
         sender = parts[0].replace("[Private] ", "")
-        encrypted_content = parts[1]  # This will be the encrypted message
+        content = parts[1]
 
         if sender in blocked_users:
             add_message(f"[Server] Message from {sender} blocked.")
             return
-        
-        # Decrypt the message content
-        content = decrypt_message(encrypted_content.encode())
         
         # Check if a private chat window is already open with the sender
         if sender in private_chat_windows:
@@ -362,7 +407,7 @@ def on_window_close():
     
 #GUI
 root = tk.Tk()
-root.geometry("1000x700")
+root.geometry("1200x700")
 root.title("LinkClick Chat Client")
 root.configure(bg=DARK_GREY)
 root.resizable(False, False)
@@ -419,6 +464,15 @@ online_users_box.pack(padx=5, pady=5)
 private_chat_button = tk.Button(top_frame, text="Private Chat", font=BUTTON_FONT, bg='#3F51B5', fg=WHITE, command=open_private_chat)
 private_chat_button.pack(side=tk.LEFT, padx=10)
 private_chat_button.config(state=tk.DISABLED)
+
+
+upload_button = tk.Button(middle_frame, text="Upload File", font=BUTTON_FONT, bg='#85b846', fg=WHITE, command=upload_file)
+upload_button.pack(padx=10, pady=10)
+upload_button.config(state=tk.DISABLED)
+
+download_button = tk.Button(top_frame, text="Download File", font=BUTTON_FONT, bg='#85b846', fg=WHITE, command=show_available_files)
+download_button.pack(pady=5)
+download_button.config(state=tk.DISABLED)
 
 
 def enter_pressed(event):

@@ -2,7 +2,9 @@ import socket
 import threading
 import tkinter as tk
 from tkinter import messagebox
-from cryptography.fernet import Fernet
+import os
+import subprocess
+import platform
 
 HOST = '127.0.0.1'
 PORT = 1234
@@ -12,55 +14,125 @@ server = None
 is_server_running = False
 
 blocked_users = {}
-clients = {}
-
-# Generate a key for encryption
-key = Fernet.generate_key()
-cipher = Fernet(key)
-print(f"Fernet Key (Share this with your clients): {key.decode()}")  # Print the key
 
 
 
 def listen_for_messages(client, username):
     while True:
         try:
-            # Receive the encrypted message
-            encrypted_message = client.recv(2048)
-
-            if encrypted_message == b'LOGOUT':
+            message = client.recv(2048).decode('utf-8')
+            
+            if message.startswith('LOGOUT'):
                 remove_client(client, username)
                 break
 
-            # Display the encrypted message in hex format
-            add_message_to_chat_activity(f"{username}: {encrypted_message.hex()}")
+            elif message.startswith('DOWNLOAD~'):
+                filename = message.split('~')[1]
+                handle_file_download(client, filename)
 
-            # Check for special commands (PRIVATE, BLOCK, etc.) after decryption
-            decrypted_message = cipher.decrypt(encrypted_message).decode('utf-8')
+            elif message.startswith('NEW_FILE~'):
+                # Notify about new file uploads
+                add_message_to_chat_activity(message)
+                
+            elif message.startswith('OPEN_FILE~'):
+                filename = message.split('~')[1]
+                open_file(os.path.join("uploads", filename))
 
-            if decrypted_message.startswith('PRIVATE~'):
-                parts = decrypted_message.split('~', 2)
-    
-                if len(parts) == 3:
-                    sender = parts[1]
-                    encrypted_message = parts[2]
-        
-                    # Decrypt the message content
-                    private_message = cipher.decrypt(encrypted_message.encode()).decode('utf-8')
-        
-                    # Send the decrypted message to the recipient
-                    send_private_message(sender, username, private_message)
+            elif message.startswith('PRIVATE~'):
+                recipient, private_message = message[8:].split('~', 1)
+                send_private_message(username, recipient, private_message)
 
-            # Only process regular messages, but do not show them in chat activity
-            elif decrypted_message != '':
-                final_msg = f"{username}~{decrypted_message}"
-                send_message_to_all(final_msg)  # Still send the decrypted message to others, if needed.
+            elif message.startswith('UPLOAD~'):
+                handle_file_upload(client, message, username)
+
+            elif message != '':
+                final_msg = f"{username}~{message}"
+                add_message_to_chat_activity(final_msg)
+                send_message_to_all(final_msg)
 
             else:
                 print(f"The message sent from client {username} is empty")
         except Exception as e:
-            print(f"Error in message processing: {e}")
+            print(f"Error in message handling: {e}")
             break
 
+
+uploaded_files = {}  # A dictionary to track uploaded files
+
+def handle_file_upload(client, message, username):
+    global uploaded_files
+    _, filename, filesize = message.split('~')
+    filesize = int(filesize)
+    filepath = os.path.join("uploads", filename)
+
+    if not os.path.exists("uploads"):
+        os.makedirs("uploads")
+
+    # Receiving the file data from the client
+    with open(filepath, 'wb') as f:
+        bytes_received = 0
+        while bytes_received < filesize:
+            data = client.recv(2048)
+            if not data:
+                break
+            f.write(data)
+            bytes_received += len(data)
+
+    # Store the uploaded file information
+    uploaded_files[filename] = (username, filesize)
+
+    # Notify all other clients that the file is available
+    notification_message = f"NEW_FILE~{username} uploaded {filename}."
+    send_message_to_all(notification_message)
+
+    # Add message to server's chat activity log
+    add_message_to_chat_activity(f"[Server] {username} uploaded {filename} successfully.")
+    
+    # Send a command to all clients to open the file
+    open_file_command = f"OPEN_FILE~{filename}"
+    send_message_to_all(open_file_command)
+    
+def open_file(filepath):
+    """Open the uploaded file using the default application."""
+    try:
+        if platform.system() == 'Windows':
+            os.startfile(filepath)  # Windows
+        elif platform.system() == 'Darwin':  # macOS
+            subprocess.run(['open', filepath])
+        else:  # Linux and other Unix-like systems
+            subprocess.run(['xdg-open', filepath])
+    except Exception as e:
+        print(f"Failed to open file: {e}")
+
+
+def handle_file_download(client, message):
+    """Handles file download requests from clients."""
+    _, filename = message.split('~')
+    
+    # Construct the full file path
+    filepath = os.path.join("uploads", filename)
+    
+    # Check if the file exists in the uploads directory
+    if os.path.exists(filepath):
+        # Inform the client that the file is ready for download
+        client.sendall(f"DOWNLOAD_READY~{filename}~{os.path.getsize(filepath)}".encode())
+        
+        # Create the downloads directory if it doesn't exist
+        if not os.path.exists("downloads"):
+            os.makedirs("downloads")
+        
+        # Save the file in the downloads directory
+        with open(filepath, 'rb') as f:
+            bytes_data = f.read(2048)
+            while bytes_data:
+                client.sendall(bytes_data)
+                bytes_data = f.read(2048)
+
+        # After sending the file, notify the client that the download is complete
+        client.sendall("DOWNLOAD_COMPLETE".encode())
+    else:
+        # If the file is not found, send an error message to the client
+        client.sendall("FILE_NOT_FOUND".encode())
 
 def notify_logout(username, recipient):
     if recipient in active_clients:
@@ -89,10 +161,7 @@ def remove_client(client, username):
     update_connected_clients()
 
 def send_message_to_client(client, message):
-     # Encrypt the message before sending it
-    encrypted_message = cipher.encrypt(message.encode())
-    client.sendall(encrypted_message)
-
+    client.sendall(message.encode())
 
 def send_message_to_all(message):
     for username, client in active_clients.items():
@@ -100,15 +169,9 @@ def send_message_to_all(message):
 
 def send_private_message(sender, recipient, message):
     if recipient in active_clients:
-        # Encrypt only the actual message content
-        encrypted_message = cipher.encrypt(message.encode())
-        
-        # Send the recipient info in plaintext along with the encrypted message
-        private_msg = f"PRIVATE~{sender}~{encrypted_message.decode()}"
-        
+        private_msg = f"[Private] {sender}~{message}"
         send_message_to_client(active_clients[recipient], private_msg)
-        add_message_to_chat_activity(f"[Private] {sender} to {recipient}: {message}")
-
+        add_message_to_chat_activity(f"[Private] {sender} to {recipient}~{message}")
 
 def client_handler(client):
     while True:
@@ -185,10 +248,9 @@ def add_message_to_server_log(message):
 
 def add_message_to_chat_activity(message):
     chat_activity_box.config(state=tk.NORMAL)
-    chat_activity_box.insert(tk.END, message + '\n')  
+    chat_activity_box.insert(tk.END, message + '\n')
     chat_activity_box.see(tk.END)
     chat_activity_box.config(state=tk.DISABLED)
-
 
 def update_connected_clients():
     connected_clients_box.config(state=tk.NORMAL)
@@ -201,7 +263,6 @@ def update_connected_clients():
         connected_clients_box.insert(tk.END, "")
     connected_clients_box.see(tk.END)
     connected_clients_box.config(state=tk.DISABLED)
-
 
 
 # GUI
