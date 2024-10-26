@@ -2,6 +2,7 @@ import socket
 import threading
 import tkinter as tk
 from tkinter import scrolledtext, messagebox, Listbox, Scrollbar
+from cryptography.fernet import Fernet
 
 HOST = '127.0.0.1'
 PORT = 1234
@@ -23,6 +24,14 @@ is_connected = False
 # Dictionary to store private chat windows
 private_chat_windows = {}
 blocked_users = set()
+key = Fernet.generate_key()
+cipher_suite = Fernet(key)
+
+def encrypt_message(message):
+    return cipher_suite.encrypt(message.encode())
+
+def decrypt_message(encrypted_message):
+    return cipher_suite.decrypt(encrypted_message).decode()
 
 def add_message(message):
     message_box.config(state=tk.NORMAL)
@@ -99,7 +108,8 @@ def send_message():
 
     if message != '':
         try:
-            client.sendall(message.encode())
+            encrypted_message = encrypt_message(message)
+            client.sendall(encrypted_message)
             message_textbox.delete(0, len(message))
         except:
             messagebox.showerror("Error", "Failed to send message due to server outage. Click 'Reconnect' or try again later.")
@@ -195,7 +205,8 @@ class PrivateChatWindow:
         message = self.message_textbox.get()
         if message != '':
             try:
-                formatted_message = f"PRIVATE~{self.recipient}~{message}"
+                encrypted_message = encrypt_message(message)
+                formatted_message = f"PRIVATE~{self.recipient}~{encrypted_message.decode()}"
                 client.sendall(formatted_message.encode())  # Send private message to server
                 self.add_private_message(f"[Me] {message}")  # Display in the chat window
                 self.message_textbox.delete(0, tk.END)
@@ -242,6 +253,7 @@ def handle_private_message(message):
         if sender in blocked_users:
             add_message(f"[Server] Message from {sender} blocked.")
             return
+        
         
         # Check if a private chat window is already open with the sender
         if sender in private_chat_windows:
