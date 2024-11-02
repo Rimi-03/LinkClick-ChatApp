@@ -10,6 +10,8 @@ active_clients = {}
 server = None
 is_server_running = False
 
+blocked_users = {}
+
 def listen_for_messages(client, username):
     while True:
         try:
@@ -162,6 +164,7 @@ def update_connected_clients():
         connected_clients_box.insert(tk.END, "")
     connected_clients_box.see(tk.END)
     connected_clients_box.config(state=tk.DISABLED)
+
 
 # GUI
 root = tk.Tk()

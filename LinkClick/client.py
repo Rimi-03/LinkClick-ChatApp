@@ -22,6 +22,7 @@ is_connected = False
 
 # Dictionary to store private chat windows
 private_chat_windows = {}
+blocked_users = set()
 
 def add_message(message):
     message_box.config(state=tk.NORMAL)
@@ -122,6 +123,8 @@ def listen_for_messages_from_server(client):
                 recipient = message.split("~")[1]
                 if recipient in private_chat_windows:
                     private_chat_windows[recipient].add_private_message(f"[Server] {recipient} has logged out.")
+            elif "[Server]" in message and "has blocked you" in message:
+                handle_private_message(message)
             elif message != '':
                 username = message.split("~")[0]
                 content = message.split("~")[1]
@@ -153,6 +156,14 @@ class PrivateChatWindow:
         self.root.configure(bg=DARK_GREY)
         self.root.resizable(False, False)
 
+        # Top frame for the "Back" button
+        self.top_frame = tk.Frame(self.root, bg=DARK_GREY)
+        self.top_frame.pack(fill="x", padx=5, pady=5)
+
+        # "Back" button to go back to the user selection (placed in the top left)
+        self.back_button = tk.Button(self.top_frame, text="<-", font=BUTTON_FONT, bg=DARK_GREY, fg=WHITE, command=self.go_back)
+        self.back_button.pack(side=tk.LEFT)
+
         # For displaying messages
         self.middle_frame = tk.Frame(self.root, bg=DARK_GREY)
         self.middle_frame.pack(fill="both", expand=True, padx=10, pady=(10, 0))
@@ -168,13 +179,19 @@ class PrivateChatWindow:
         self.message_textbox = tk.Entry(self.bottom_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY)
         self.message_textbox.pack(side=tk.LEFT, fill="x", expand=True, padx=(0, 10))
 
+        self.block_button = tk.Button(self.bottom_frame, text="Block", font=BUTTON_FONT, bg=RED, fg=WHITE, command=self.toggle_block_user)
+        self.block_button.pack(side=tk.RIGHT, padx=10)
+
         self.send_button = tk.Button(self.bottom_frame, text="Send", font=BUTTON_FONT, bg=OCEAN_BLUE, fg=WHITE, command=self.send_private_message)
         self.send_button.pack(side=tk.RIGHT)
         self.message_textbox.bind('<Return>', lambda event: self.send_private_message())
-        
+
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def send_private_message(self):
+        if self.recipient in blocked_users:
+            return
+        
         message = self.message_textbox.get()
         if message != '':
             try:
@@ -193,6 +210,20 @@ class PrivateChatWindow:
         self.chat_box.config(state=tk.DISABLED)
         self.chat_box.see(tk.END)
 
+    def toggle_block_user(self):
+        if self.recipient in blocked_users:
+            blocked_users.remove(self.recipient)
+            self.add_private_message(f"[Server] You unblocked {self.recipient}.")
+            self.block_button.config(text="Block", bg=RED)
+        else:
+            blocked_users.add(self.recipient)
+            self.add_private_message(f"[Server] You blocked {self.recipient}.")
+            self.block_button.config(text="Unblock", bg="orange") 
+            self.send_block_message(self.recipient)
+    def go_back(self):
+        self.root.destroy()
+        open_private_chat()
+
     def on_close(self):
         del private_chat_windows[self.recipient]  # Remove window from dictionary
         self.root.destroy()
@@ -208,6 +239,10 @@ def handle_private_message(message):
         sender = parts[0].replace("[Private] ", "")
         content = parts[1]
 
+        if sender in blocked_users:
+            add_message(f"[Server] Message from {sender} blocked.")
+            return
+        
         # Check if a private chat window is already open with the sender
         if sender in private_chat_windows:
             private_chat_windows[sender].add_private_message(f"[{sender}] {content}")
