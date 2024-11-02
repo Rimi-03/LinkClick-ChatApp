@@ -1,4 +1,3 @@
-# server.py
 from platform import processor
 import socket
 import threading
@@ -19,12 +18,12 @@ ENCRYPTION_KEY = b'HygT3AM_AQiSCvGwCBBIy_rdzi8AxZxL5x44CyAk7K4='
 cipher = Fernet(ENCRYPTION_KEY)
 
 def encrypt_message(message):
-    if isinstance(message, bytes):  # If message is already bytes, avoid re-encoding
+    if isinstance(message, bytes):
         return cipher.encrypt(message)
     return cipher.encrypt(message.encode())
 
 def decrypt_message(encrypted_message):
-    if not isinstance(encrypted_message, bytes):  # Ensures it's bytes before decrypting
+    if not isinstance(encrypted_message, bytes):
         encrypted_message = encrypted_message.encode()
     return cipher.decrypt(encrypted_message).decode()
 
