@@ -1,7 +1,10 @@
+#client.py
 import socket
 import threading
 import tkinter as tk
 from tkinter import scrolledtext, messagebox, Listbox, Scrollbar
+from cryptography.fernet import Fernet
+
 
 HOST = '127.0.0.1'
 PORT = 1234
@@ -11,7 +14,7 @@ LIGHT_GREY = '#D3D3D3'
 OCEAN_BLUE = '#5DADE2'
 SOFT_WHITE = '#F4F6F7'
 WHITE = "white"
-FONT = ("Helvetica", 14)
+FONT = ("Helvetica", 13, "bold")
 BUTTON_FONT = ("Helvetica", 13, "bold")
 SMALL_FONT = ("Helvetica", 11)
 HEADER_FONT = ("Helvetica", 16, "bold")
@@ -23,6 +26,20 @@ is_connected = False
 # Dictionary to store private chat windows
 private_chat_windows = {}
 blocked_users = set()
+
+ENCRYPTION_KEY = b'HygT3AM_AQiSCvGwCBBIy_rdzi8AxZxL5x44CyAk7K4='
+cipher = Fernet(ENCRYPTION_KEY)
+
+def encrypt_message(message):
+    if isinstance(message, bytes):  # If message is already bytes, avoid re-encoding
+        return cipher.encrypt(message)
+    return cipher.encrypt(message.encode())
+
+def decrypt_message(encrypted_message):
+    if not isinstance(encrypted_message, bytes):  # Ensure it's bytes before decrypting
+        encrypted_message = encrypted_message.encode()
+    return cipher.decrypt(encrypted_message).decode()
+
 
 def add_message(message):
     message_box.config(state=tk.NORMAL)
@@ -43,7 +60,9 @@ def update_online_clients(clients_list):
     online_users_box.config(state=tk.DISABLED)
 
 def connect():
-    global client, is_connected
+    global client, is_connected, HOST, PORT
+    HOST = host_textbox.get().strip()  # Get IP from input
+    PORT = int(port_textbox.get().strip())  # Get port from input
     username = username_textbox.get().strip()
 
     if username == "":
@@ -66,6 +85,8 @@ def connect():
     client.sendall(username.encode())
     threading.Thread(target=listen_for_messages_from_server, args=(client,), daemon=True).start()
 
+    host_textbox.config(state=tk.DISABLED)
+    port_textbox.config(state=tk.DISABLED)
     username_textbox.config(state=tk.DISABLED)
     username_button.config(state=tk.DISABLED)
     message_button.config(state=tk.NORMAL)
@@ -99,18 +120,23 @@ def send_message():
 
     if message != '':
         try:
-            client.sendall(message.encode())
+            # Convert to bytes only if not already in bytes format
+            if not isinstance(message, bytes):
+                message = message.encode()  # Ensure message is in bytes format
+            encrypted_message = cipher.encrypt(message)
+            client.sendall(encrypted_message)
             message_textbox.delete(0, len(message))
         except:
             messagebox.showerror("Error", "Failed to send message due to server outage. Click 'Reconnect' or try again later.")
-    else:
-        messagebox.showerror("Empty message", "Message cannot be empty")
+
 
 def listen_for_messages_from_server(client):
     global is_connected
     while is_connected:
         try:
-            message = client.recv(2048).decode('utf-8')
+            encrypted_message = client.recv(2048)  # Receive the encrypted message
+            message = cipher.decrypt(encrypted_message).decode('utf-8')
+
             if message.startswith("USERS~"):
                 users = message.replace("USERS~", "").split(", ")
                 update_online_clients(users)
@@ -187,7 +213,8 @@ class PrivateChatWindow:
         self.message_textbox.bind('<Return>', lambda event: self.send_private_message())
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-
+        
+    
     def send_private_message(self):
         if self.recipient in blocked_users:
             return
@@ -196,8 +223,10 @@ class PrivateChatWindow:
         if message != '':
             try:
                 formatted_message = f"PRIVATE~{self.recipient}~{message}"
-                client.sendall(formatted_message.encode())  # Send private message to server
-                self.add_private_message(f"[Me] {message}")  # Display in the chat window
+                # Encrypt the formatted private message
+                encrypted_message = cipher.encrypt(formatted_message.encode())
+                client.sendall(encrypted_message)
+                self.add_private_message(f"[Me] {message}")
                 self.message_textbox.delete(0, tk.END)
             except:
                 messagebox.showerror("Error", "Failed to send private message.")
@@ -218,8 +247,8 @@ class PrivateChatWindow:
         else:
             blocked_users.add(self.recipient)
             self.add_private_message(f"[Server] You blocked {self.recipient}.")
-            self.block_button.config(text="Unblock", bg="orange") 
-            self.send_block_message(self.recipient)
+            self.block_button.config(text="Unblock", bg="orange")
+            
     def go_back(self):
         self.root.destroy()
         open_private_chat()
@@ -230,7 +259,6 @@ class PrivateChatWindow:
 
 def handle_private_message(message):
     try:
-        print(f"Received private message: {message}")
         parts = message.split("~")
 
         if len(parts) != 2:
@@ -245,17 +273,19 @@ def handle_private_message(message):
         
         # Check if a private chat window is already open with the sender
         if sender in private_chat_windows:
+            print(f"Received private message: {message}")
             private_chat_windows[sender].add_private_message(f"[{sender}] {content}")
         else:
             # Open window for recipient
             window = PrivateChatWindow(sender)
             private_chat_windows[sender] = window
+            print(f"Received private message: {message}")
             window.add_private_message(f"[{sender}] {content}")
     except Exception as e:
         add_message(f"[Error] {str(e)}")
-
+    
 def open_private_chat():
-    # Create a new Toplevel window for user selection
+    # Creating new Toplevel window for user selection
     selection_window = tk.Toplevel(root)
     selection_window.title("Select User for Private Chat")
     selection_window.geometry("200x200")
@@ -301,7 +331,8 @@ def logout():
     global is_connected
     if is_connected:
         try:
-            client.sendall("LOGOUT".encode())
+            logout_message = cipher.encrypt("LOGOUT".encode())
+            client.sendall(logout_message)
             client.close()
             is_connected = False
             add_message("[Client] Disconnected from server.")
@@ -318,20 +349,14 @@ def logout():
         messagebox.showinfo("Info", "You are not connected to the server.")
 
 def on_window_close():
-    global is_connected
-    if is_connected:
-        try:
-            client.sendall("LOGOUT".encode())
-            client.close()
-            add_message("[Client] Disconnected from server.")
-        except:
-            messagebox.showerror("Error", "Failed to disconnect properly.")
+    logout()
     root.destroy()
-    
-    
+
+
+
 #GUI
 root = tk.Tk()
-root.geometry("1000x700")
+root.geometry("1040x700")
 root.title("LinkClick Chat Client")
 root.configure(bg=DARK_GREY)
 root.resizable(False, False)
@@ -342,10 +367,25 @@ top_frame.pack(fill="x", padx=10, pady=10)
 header_label = tk.Label(top_frame, text="Global Chat", font=HEADER_FONT, bg=DARK_GREY, fg=OCEAN_BLUE)
 header_label.pack(pady=(0,5))
 
-username_label = tk.Label(top_frame, text="Enter Username: ", font=FONT, bg=DARK_GREY, fg=SOFT_WHITE)
-username_label.pack(side=tk.LEFT, padx=(10, 0))
+# New labels and entry fields for host and port
+host_label = tk.Label(top_frame, text="Host IP: ", font=FONT, bg=DARK_GREY, fg=SOFT_WHITE)
+host_label.pack(side=tk.LEFT, padx=(0, 0))
 
-username_textbox = tk.Entry(top_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=25)
+host_textbox = tk.Entry(top_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=10)
+host_textbox.insert(0, HOST)  # Pre-fill with default value
+host_textbox.pack(side=tk.LEFT, padx=5)
+
+port_label = tk.Label(top_frame, text="Port: ", font=FONT, bg=DARK_GREY, fg=SOFT_WHITE)
+port_label.pack(side=tk.LEFT, padx=(0, 0))
+
+port_textbox = tk.Entry(top_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=7)
+port_textbox.insert(0, str(PORT))  # Pre-fill with default value
+port_textbox.pack(side=tk.LEFT, padx=5)
+
+username_label = tk.Label(top_frame, text="Enter Username: ", font=FONT, bg=DARK_GREY, fg=SOFT_WHITE)
+username_label.pack(side=tk.LEFT, padx=(0, 0))
+
+username_textbox = tk.Entry(top_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=15)
 username_textbox.pack(side=tk.LEFT, padx=10)
 
 username_button = tk.Button(top_frame, text="Join", font=BUTTON_FONT, bg=OCEAN_BLUE, fg=WHITE, command=connect)
@@ -368,8 +408,8 @@ message_box.pack(fill="both", expand=True)
 
 message_box.tag_configure('error', foreground=RED)
 
-message_textbox = tk.Entry(middle_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=55)
-message_textbox.pack(side=tk.LEFT, padx=10, pady=10)
+message_textbox = tk.Entry(middle_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=80)
+message_textbox.pack(side=tk.LEFT, padx=0, pady=10)
 
 message_button = tk.Button(middle_frame, text="Send", font=BUTTON_FONT, bg=OCEAN_BLUE, fg=WHITE, command=send_message)
 message_button.pack(side=tk.LEFT, padx=10)
