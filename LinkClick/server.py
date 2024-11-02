@@ -1,7 +1,10 @@
+# server.py
+from platform import processor
 import socket
 import threading
 import tkinter as tk
 from tkinter import messagebox
+from cryptography.fernet import Fernet
 
 HOST = '127.0.0.1'
 PORT = 1234
@@ -12,10 +15,50 @@ is_server_running = False
 
 blocked_users = {}
 
+ENCRYPTION_KEY = b'HygT3AM_AQiSCvGwCBBIy_rdzi8AxZxL5x44CyAk7K4='
+cipher = Fernet(ENCRYPTION_KEY)
+
+def encrypt_message(message):
+    if isinstance(message, bytes):  # If message is already bytes, avoid re-encoding
+        return cipher.encrypt(message)
+    return cipher.encrypt(message.encode())
+
+def decrypt_message(encrypted_message):
+    if not isinstance(encrypted_message, bytes):  # Ensures it's bytes before decrypting
+        encrypted_message = encrypted_message.encode()
+    return cipher.decrypt(encrypted_message).decode()
+
+
+def notify_logout(username, recipient):
+    if recipient in active_clients:
+        logout_message = f"LOGOUT_PRIVATE~{username}"
+        send_message_to_client(active_clients[recipient], logout_message)
+
+def remove_client(client, username):
+    global active_clients
+    client_info = client.getpeername()
+
+    if username in active_clients:
+        for user in active_clients.keys():
+            if user != username:
+                notify_logout(username, user)
+
+        client.close()
+        del active_clients[username]
+
+        server_log_message = f"Client {client_info[0]}:{client_info[1]} has disconnected."
+        add_message_to_server_log(server_log_message)
+
+        prompt_message = f"Server~{username} has left the chat."
+        send_message_to_all(prompt_message)
+        add_message_to_chat_activity(prompt_message)
+        update_connected_clients()
+
 def listen_for_messages(client, username):
     while True:
         try:
-            message = client.recv(2048).decode('utf-8')
+            encrypted_message = client.recv(2048)  # Receiving encrypted message
+            message = cipher.decrypt(encrypted_message).decode('utf-8')  # Decrypt message
 
             if message == 'LOGOUT':
                 remove_client(client, username)
@@ -27,52 +70,34 @@ def listen_for_messages(client, username):
 
             elif message != '':
                 final_msg = f"{username}~{message}"
-                add_message_to_chat_activity(final_msg)
+                add_message_to_chat_activity(f"{username}: {cipher.encrypt(final_msg.encode()).decode()}")  # Log encrypted message
                 send_message_to_all(final_msg)
 
             else:
                 print(f"The message sent from client {username} is empty")
-        except:
+        except Exception as e:
+            print(f"Error message: {e}")
             break
 
-def notify_logout(username, recipient):
-    if recipient in active_clients:
-        logout_message = f"LOGOUT_PRIVATE~{username}"
-        send_message_to_client(active_clients[recipient], logout_message)  # Notify recipient only
-
-def remove_client(client, username):
-    global active_clients
-    client_info = client.getpeername()
-
-    if username in active_clients:
-        # Notify private chat partners before removing the user
-        for user in active_clients.keys():
-            if user != username:
-                notify_logout(username, user)
-        
-        del active_clients[username]
-    client.close()
-
-    server_log_message = f"Client {client_info[0]}:{client_info[1]} has disconnected."
-    add_message_to_server_log(server_log_message)
-
-    prompt_message = f"Server~{username} has left the chat."
-    add_message_to_chat_activity(prompt_message)
-    send_message_to_all(prompt_message)
-    update_connected_clients()
-
 def send_message_to_client(client, message):
-    client.sendall(message.encode())
+    encrypted_message = cipher.encrypt(message.encode())  # Encrypt message
+    client.sendall(encrypted_message)
 
 def send_message_to_all(message):
+    if not is_server_running:
+        return
     for username, client in active_clients.items():
-        send_message_to_client(client, message)
+        try:
+            send_message_to_client(client, message)
+        except Exception as e:
+            print(f"Error sending message to {username}: {e}")
 
 def send_private_message(sender, recipient, message):
     if recipient in active_clients:
         private_msg = f"[Private] {sender}~{message}"
         send_message_to_client(active_clients[recipient], private_msg)
-        add_message_to_chat_activity(f"[Private] {sender} to {recipient}~{message}")
+        
+        add_message_to_chat_activity(f"[Private] {sender} to {recipient}~{cipher.encrypt(private_msg.encode()).decode()}")
 
 def client_handler(client):
     while True:
@@ -112,21 +137,24 @@ def stop_server():
     global server, is_server_running
     if is_server_running:
         is_server_running = False
-
-        for username, client in active_clients.items():
+        
+        # Close all client connections
+        for username, client in list(active_clients.items()):
             try:
                 client.close()
-            except:
-                pass
-
+            except Exception as e:
+                print(f"Error closing client {username}: {e}")
+        
         active_clients.clear()
-
+        
         try:
             server.close()
             add_message_to_server_log("Server stopped.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to stop the server: {e}")
+        finally:
+            # Update connected clients box after stopping the server
             update_connected_clients()
-        except:
-            messagebox.showerror("Error", "Failed to stop the server.")
     else:
         messagebox.showerror("Error", "Server is not running!")
 
@@ -138,7 +166,8 @@ def accept_clients():
             add_message_to_server_log(f"Client {address[0]}:{address[1]} connected.")
             threading.Thread(target=client_handler, args=(client,), daemon=True).start()
         except Exception as e:
-            print(f"Error accepting clients: {e}")
+            if is_server_running:
+                print(f"Error accepting clients: {e}")
             break
 
 def add_message_to_server_log(message):
@@ -154,16 +183,23 @@ def add_message_to_chat_activity(message):
     chat_activity_box.config(state=tk.DISABLED)
 
 def update_connected_clients():
-    connected_clients_box.config(state=tk.NORMAL)
-    connected_clients_box.delete(1.0, tk.END)
-    clients_list = list(active_clients.keys())
-    if clients_list:
-        connected_clients_box.insert(tk.END, ", ".join(clients_list))
-        send_message_to_all(f"USERS~{', '.join(clients_list)}")
-    else:
-        connected_clients_box.insert(tk.END, "")
+    try:
+        connected_clients_box.config(state=tk.NORMAL)
+        connected_clients_box.delete(1.0, tk.END)
+        
+        clients_list = list(active_clients.keys())
+        if clients_list:
+            connected_clients_box.insert(tk.END, ", ".join(clients_list))
+            send_message_to_all(f"USERS~{', '.join(clients_list)}")
+        else:
+            connected_clients_box.insert(tk.END, "")
+        
+        
+    except Exception as e:
+        print(f"Error updating connected clients box: {e}")
+    finally:
+        connected_clients_box.config(state=tk.DISABLED)
     connected_clients_box.see(tk.END)
-    connected_clients_box.config(state=tk.DISABLED)
 
 
 # GUI
