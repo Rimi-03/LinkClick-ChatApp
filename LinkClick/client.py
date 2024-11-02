@@ -1,4 +1,3 @@
-#client.py
 import socket
 import threading
 import tkinter as tk
@@ -61,8 +60,8 @@ def update_online_clients(clients_list):
 
 def connect():
     global client, is_connected, HOST, PORT
-    HOST = host_textbox.get().strip()  # Get IP from input
-    PORT = int(port_textbox.get().strip())  # Get port from input
+    HOST = host_textbox.get().strip()
+    PORT = int(port_textbox.get().strip())
     username = username_textbox.get().strip()
 
     if username == "":
@@ -122,7 +121,7 @@ def send_message():
         try:
             # Convert to bytes only if not already in bytes format
             if not isinstance(message, bytes):
-                message = message.encode()  # Ensure message is in bytes format
+                message = message.encode()
             encrypted_message = cipher.encrypt(message)
             client.sendall(encrypted_message)
             message_textbox.delete(0, len(message))
@@ -134,7 +133,7 @@ def listen_for_messages_from_server(client):
     global is_connected
     while is_connected:
         try:
-            encrypted_message = client.recv(2048)  # Receive the encrypted message
+            encrypted_message = client.recv(2048)
             message = cipher.decrypt(encrypted_message).decode('utf-8')
 
             if message.startswith("USERS~"):
@@ -182,15 +181,12 @@ class PrivateChatWindow:
         self.root.configure(bg=DARK_GREY)
         self.root.resizable(False, False)
 
-        # Top frame for the "Back" button
         self.top_frame = tk.Frame(self.root, bg=DARK_GREY)
         self.top_frame.pack(fill="x", padx=5, pady=5)
 
-        # "Back" button to go back to the user selection (placed in the top left)
         self.back_button = tk.Button(self.top_frame, text="<-", font=BUTTON_FONT, bg=DARK_GREY, fg=WHITE, command=self.go_back)
         self.back_button.pack(side=tk.LEFT)
 
-        # For displaying messages
         self.middle_frame = tk.Frame(self.root, bg=DARK_GREY)
         self.middle_frame.pack(fill="both", expand=True, padx=10, pady=(10, 0))
 
@@ -198,7 +194,6 @@ class PrivateChatWindow:
         self.chat_box.config(state=tk.DISABLED)
         self.chat_box.pack(fill="both", expand=True)
 
-        # For message input
         self.bottom_frame = tk.Frame(self.root, bg=DARK_GREY)
         self.bottom_frame.pack(fill="x", padx=10, pady=(0, 10))
 
@@ -367,19 +362,18 @@ top_frame.pack(fill="x", padx=10, pady=10)
 header_label = tk.Label(top_frame, text="Global Chat", font=HEADER_FONT, bg=DARK_GREY, fg=OCEAN_BLUE)
 header_label.pack(pady=(0,5))
 
-# New labels and entry fields for host and port
 host_label = tk.Label(top_frame, text="Host IP: ", font=FONT, bg=DARK_GREY, fg=SOFT_WHITE)
 host_label.pack(side=tk.LEFT, padx=(0, 0))
 
 host_textbox = tk.Entry(top_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=10)
-host_textbox.insert(0, HOST)  # Pre-fill with default value
+host_textbox.insert(0, HOST)
 host_textbox.pack(side=tk.LEFT, padx=5)
 
 port_label = tk.Label(top_frame, text="Port: ", font=FONT, bg=DARK_GREY, fg=SOFT_WHITE)
 port_label.pack(side=tk.LEFT, padx=(0, 0))
 
 port_textbox = tk.Entry(top_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY, width=7)
-port_textbox.insert(0, str(PORT))  # Pre-fill with default value
+port_textbox.insert(0, str(PORT))
 port_textbox.pack(side=tk.LEFT, padx=5)
 
 username_label = tk.Label(top_frame, text="Enter Username: ", font=FONT, bg=DARK_GREY, fg=SOFT_WHITE)
