@@ -200,9 +200,11 @@ class PrivateChatWindow:
         self.message_textbox = tk.Entry(self.bottom_frame, font=FONT, bg=LIGHT_GREY, fg=DARK_GREY)
         self.message_textbox.pack(side=tk.LEFT, fill="x", expand=True, padx=(0, 10))
 
-        self.block_button = tk.Button(self.bottom_frame, text="Block", font=BUTTON_FONT, bg=RED, fg=WHITE, command=self.toggle_block_user)
+        self.block_button = tk.Button(self.bottom_frame, text="Block" if self.recipient not in blocked_users else "Unblock", 
+                                      font=BUTTON_FONT, bg=RED if self.recipient not in blocked_users else "orange", 
+                                      fg=WHITE, command=self.toggle_block_user)
         self.block_button.pack(side=tk.RIGHT, padx=10)
-
+        
         self.send_button = tk.Button(self.bottom_frame, text="Send", font=BUTTON_FONT, bg=OCEAN_BLUE, fg=WHITE, command=self.send_private_message)
         self.send_button.pack(side=tk.RIGHT)
         self.message_textbox.bind('<Return>', lambda event: self.send_private_message())
