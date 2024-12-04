@@ -1,9 +1,9 @@
 # LinkClick-ChatApp
 
 # Team Members
-222-134-014 Nahida Ahmed Chowdhury
-222-134-025 Khadiza Sultana Chowdhury Rimi
-222-135-028 Naima Rahman 
+- 222-134-014 Nahida Ahmed Chowdhury
+- 222-134-025 Khadiza Sultana Chowdhury Rimi
+- 222-135-028 Naima Rahman 
 
 LinkClick-ChatApp is a simple chat application built using Python's `Tkinter` for the graphical user interface (GUI) and `socket programming` for client-server communication. This app allows users to send public and private messages, view online users, block/unblock users in private chats, and ensures secure communication through encryption.
 
